@@ -1,121 +1,232 @@
 import SwiftUI
 
-// MARK: - 历史面板视图
-/// 显示剪贴板历史记录的列表视图
-/// 支持选择、复制和清除操作
 struct HistoryPanelView: View {
-    /// 剪贴板存储
     @ObservedObject var store: ClipboardStore
-    /// 选中项目回调
     let onSelect: (ClipboardItem) -> Void
-    /// 清除历史回调
     let onClear: () -> Void
-    /// 关闭面板回调
     let onClose: () -> Void
-    /// 当前选中的项目 ID
+
     @State private var selectedItemID: ClipboardItem.ID?
-    /// 列表焦点状态
     @FocusState private var isListFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 头部
-            header
+        ZStack {
+            backgroundLayer
 
-            if store.items.isEmpty {
-                // 空状态提示
-                ContentUnavailableView("No Clipboard History", systemImage: "clipboard")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                // 历史记录列表
-                List(selection: $selectedItemID) {
-                    ForEach(store.items) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            // 文本内容，最多显示两行
-                            Text(item.content)
-                                .lineLimit(2)
-                                .truncationMode(.tail)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                keyboardHint
 
-                            // 复制时间
-                            Text(item.copiedAt, format: .dateTime.hour().minute().second())
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 4)
-                        .tag(item.id)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedItemID = item.id
-                            selectCurrentItem()
-                        }
-                        .help(item.content)
-                    }
+                if store.items.isEmpty {
+                    emptyState
+                } else {
+                    historyList
                 }
-                .listStyle(.plain)
-                .focused($isListFocused)
-                .onAppear {
-                    normalizeSelection()
-                    DispatchQueue.main.async {
-                        isListFocused = true
-                    }
-                }
-                .onChange(of: store.items.map(\.id)) { _ in
-                    normalizeSelection()
-                }
-                .onMoveCommand(perform: handleMoveCommand)
             }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.white.opacity(0.72))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.85), lineWidth: 0.5)
+            )
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.35), .clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+                    .frame(height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .allowsHitTesting(false)
+            }
+            .shadow(color: Color.black.opacity(0.06), radius: 16, y: 6)
+            .padding(14)
         }
-        .padding(12)
-        .frame(minWidth: 520, minHeight: 360)
+        .preferredColorScheme(.light)
+        .frame(minWidth: 620, minHeight: 500)
     }
 
-    // MARK: - 头部视图
+    private var backgroundLayer: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.94, green: 0.96, blue: 1.0),
+                Color(red: 0.91, green: 0.94, blue: 0.98)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+
     private var header: some View {
-        HStack {
-            Text("Clipboard History")
-                .font(.headline)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Clipboard History")
+                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                Text("Liquid glass style quick picker")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
             Spacer()
 
-            // 复制按钮
             Button("Copy") {
                 selectCurrentItem()
             }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(red: 0.30, green: 0.53, blue: 0.95))
             .disabled(store.items.isEmpty || selectedItemID == nil)
             .keyboardShortcut(.defaultAction)
 
-            // 清除按钮
             Button("Clear") {
                 onClear()
             }
+            .buttonStyle(.bordered)
             .disabled(store.items.isEmpty)
 
-            // 关闭按钮
             Button("Close") {
                 onClose()
             }
+            .buttonStyle(.bordered)
             .keyboardShortcut(.cancelAction)
         }
     }
 
-    // MARK: - 处理移动命令
-    /// 处理键盘上下移动命令
-    /// - Parameter direction: 移动方向
-    private func handleMoveCommand(_ direction: MoveCommandDirection) {
-        switch direction {
-        case .up:
-            moveSelection(by: -1)
-        case .down:
-            moveSelection(by: 1)
-        default:
-            break
+    private var keyboardHint: some View {
+        HStack(spacing: 10) {
+            Label("Up / Down", systemImage: "arrow.up.arrow.down")
+            Text("Move")
+            Label("Return", systemImage: "return.left")
+            Text("Copy")
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(Color.white.opacity(0.5), in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
+        )
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "clipboard")
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text("No Clipboard History")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("Copy some text from any app, it will appear here.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.45))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
+        )
+    }
+
+    private var historyList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(store.items) { item in
+                        row(item)
+                            .id(item.id)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedItemID = item.id
+                                selectCurrentItem()
+                            }
+                            .help(item.content)
+                    }
+                }
+                .padding(6)
+            }
+            .focusable()
+            .focused($isListFocused)
+            .onKeyPress(.upArrow) {
+                moveSelection(by: -1)
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(selectedItemID, anchor: .center)
+                }
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                moveSelection(by: 1)
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(selectedItemID, anchor: .center)
+                }
+                return .handled
+            }
+            .onAppear {
+                normalizeSelection()
+                DispatchQueue.main.async {
+                    isListFocused = true
+                }
+            }
+            .onChange(of: store.items.map(\.id)) { _ in
+                normalizeSelection()
+            }
         }
     }
 
-    // MARK: - 移动选择
-    /// 按指定步长移动选中项
-    /// - Parameter step: 移动步长（正数为向下，负数为向上）
+    private func row(_ item: ClipboardItem) -> some View {
+        let isSelected = selectedItemID == item.id
+
+        return HStack(spacing: 0) {
+            // Left accent bar for selected state
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(Color.primary.opacity(isSelected ? 0.7 : 0))
+                .frame(width: 3)
+                .padding(.vertical, 6)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.content)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(item.copiedAt, format: .dateTime.hour().minute().second())
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 12)
+            .padding(.vertical, 12)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(isSelected ? 0.55 : 0.35))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(
+                    Color.white.opacity(isSelected ? 0.8 : 0.45),
+                    lineWidth: 0.5
+                )
+        )
+        .scaleEffect(isSelected ? 1.01 : 1.0)
+        .shadow(color: Color.black.opacity(isSelected ? 0.07 : 0.02), radius: isSelected ? 6 : 2, y: 2)
+        .animation(.easeOut(duration: 0.18), value: isSelected)
+    }
+
     private func moveSelection(by step: Int) {
         guard !store.items.isEmpty else {
             selectedItemID = nil
@@ -124,19 +235,14 @@ struct HistoryPanelView: View {
 
         guard let selectedItemID,
               let currentIndex = store.items.firstIndex(where: { $0.id == selectedItemID }) else {
-            // 如果没有选中项，选中第一项
             self.selectedItemID = store.items.first?.id
             return
         }
 
-        // 计算新索引，确保在有效范围内
         let nextIndex = min(max(currentIndex + step, 0), store.items.count - 1)
         self.selectedItemID = store.items[nextIndex].id
     }
 
-    // MARK: - 规范化选择
-    /// 确保选中项始终有效
-    /// 如果当前选中项被删除，则选中新第一项
     private func normalizeSelection() {
         guard !store.items.isEmpty else {
             selectedItemID = nil
@@ -151,8 +257,6 @@ struct HistoryPanelView: View {
         selectedItemID = store.items.first?.id
     }
 
-    // MARK: - 选择当前项
-    /// 触发选中项的回调
     private func selectCurrentItem() {
         guard let selectedItemID,
               let item = store.items.first(where: { $0.id == selectedItemID }) else {

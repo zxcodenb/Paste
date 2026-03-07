@@ -54,7 +54,7 @@ final class PanelController {
 
         // 创建浮动面板
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 500),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -63,6 +63,8 @@ final class PanelController {
         // 配置面板属性
         panel.isFloatingPanel = true
         panel.level = .floating
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         // 允许面板在所有空间和全屏辅助应用中使用
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         // 隐藏标题栏
