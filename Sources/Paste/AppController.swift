@@ -63,9 +63,9 @@ final class AppController: ObservableObject {
         self.hotkeyManager = hotkeyManager
         self.pasteboardWriter = pasteboardWriter
 
-        // 设置剪贴板监控回调 - 当检测到新文本时添加到存储
-        self.clipboardMonitor.onTextCopied = { [weak self] text, sourceBundleId in
-            self?.store.addFromPasteboard(text, sourceAppBundleId: sourceBundleId)
+        // 设置剪贴板监控回调 - 当检测到新内容时添加到存储
+        self.clipboardMonitor.onPayloadCopied = { [weak self] payload, sourceBundleId in
+            self?.store.addFromPasteboard(payload, sourceAppBundleId: sourceBundleId)
         }
 
         // 设置快捷键回调 - 切换历史面板显示
@@ -122,7 +122,15 @@ final class AppController: ObservableObject {
         // 忽略下一次剪贴板变化（避免重复添加刚复制的内容）
         clipboardMonitor.ignoreNextChange()
         // 将选中内容写入剪贴板
-        pasteboardWriter.writeText(item.content)
+        switch item.payload {
+        case let .text(text):
+            pasteboardWriter.writeText(text)
+        case .image:
+            guard let blob = store.imageBlob(for: item) else {
+                return
+            }
+            pasteboardWriter.writeImageData(blob.data, pasteboardType: blob.pasteboardType)
+        }
         // 隐藏面板
         hideHistoryPanel()
     }

@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 // MARK: - 剪贴板存储协议
@@ -7,17 +8,20 @@ import Foundation
 protocol ClipboardStoreProtocol: AnyObject {
     /// 当前存储的所有剪贴板项目
     var items: [ClipboardItem] { get }
-    /// 从剪贴板添加新项目
+    /// 从剪贴板添加新项目（文本或图片）
     /// - Parameters:
-    ///   - text: 文本内容
+    ///   - payload: 剪贴板捕获内容
     ///   - sourceAppBundleId: 来源应用的 Bundle 标识符
-    func addFromPasteboard(_ text: String, sourceAppBundleId: String?)
+    func addFromPasteboard(_ payload: ClipboardCapturedPayload, sourceAppBundleId: String?)
     /// 清空所有历史记录
     func clear()
     /// 从磁盘加载历史记录
     func load()
     /// 将历史记录保存到磁盘
     func save()
+    /// 切换某条记录的收藏状态
+    /// - Parameter itemID: 历史记录 ID
+    func toggleFavorite(for itemID: ClipboardItem.ID)
 }
 
 // MARK: - 剪贴板存储
@@ -30,9 +34,13 @@ final class ClipboardStore: ObservableObject, ClipboardStoreProtocol {
 
     /// 最大保存的项目数量
     let maxItems: Int
+    /// 单张图片允许的最大字节数
+    let maxImageBytes: Int
 
     /// 存储文件的 URL
     private let storageURL: URL
+    /// 图片资产目录 URL
+    private let assetsDirectoryURL: URL
     /// 文件管理器
     private let fileManager: FileManager
     /// JSON 编码器
@@ -43,16 +51,20 @@ final class ClipboardStore: ObservableObject, ClipboardStoreProtocol {
     /// 初始化剪贴板存储
     /// - Parameters:
     ///   - maxItems: 最大保存的项目数量，默认为 50
+    ///   - maxImageBytes: 单张图片最大体积，默认为 10 MB
     ///   - storageURL: 存储文件的 URL，默认为默认位置
     ///   - fileManager: 文件管理器，默认为默认实例
     init(
         maxItems: Int = 50,
+        maxImageBytes: Int = 10 * 1024 * 1024,
         storageURL: URL? = nil,
         fileManager: FileManager = .default
     ) {
         self.maxItems = max(1, maxItems)
+        self.maxImageBytes = max(1, maxImageBytes)
         self.fileManager = fileManager
         self.storageURL = storageURL ?? Self.defaultStorageURL(fileManager: fileManager)
+        self.assetsDirectoryURL = self.storageURL.deletingLastPathComponent().appendingPathComponent("assets", isDirectory: true)
         self.encoder = JSONEncoder()
         self.decoder = JSONDecoder()
         // 使用 ISO8601 日期格式
@@ -60,37 +72,111 @@ final class ClipboardStore: ObservableObject, ClipboardStoreProtocol {
         self.decoder.dateDecodingStrategy = .iso8601
     }
 
-    /// 从剪贴板添加新项目
+    /// 向后兼容调用入口：添加文本
     /// - Parameters:
     ///   - text: 文本内容
-    ///   - sourceAppBundleId: 来源应用的 Bundle 标识符
+    ///   - sourceAppBundleId: 来源应用
+    /// 从剪贴板添加新项目
     func addFromPasteboard(_ text: String, sourceAppBundleId: String?) {
-        // 忽略空文本
-        guard !text.isEmpty else {
-            return
+        addFromPasteboard(.text(text), sourceAppBundleId: sourceAppBundleId)
+    }
+
+    /// 从剪贴板添加新项目
+    /// - Parameters:
+    ///   - payload: 剪贴板捕获内容（文本或图片）
+    ///   - sourceAppBundleId: 来源应用的 Bundle 标识符
+    func addFromPasteboard(_ payload: ClipboardCapturedPayload, sourceAppBundleId: String?) {
+        let item: ClipboardItem
+
+        switch payload {
+        case let .text(text):
+            guard !text.isEmpty else {
+                return
+            }
+
+            if let latest = items.first,
+               latest.textContent == text {
+                return
+            }
+
+            item = ClipboardItem(payload: .text(text), sourceAppBundleId: sourceAppBundleId)
+
+        case let .image(image):
+            guard image.byteSize > 0, image.byteSize <= maxImageBytes else {
+                return
+            }
+
+            let digest = Self.sha256Hex(of: image.data)
+            if let latest = items.first?.imageMetadata,
+               latest.sha256 == digest {
+                return
+            }
+
+            do {
+                try ensureAssetsDirectory()
+                let fileName = imageFileName(for: image.pasteboardType)
+                let fileURL = assetsDirectoryURL.appendingPathComponent(fileName)
+                try image.data.write(to: fileURL, options: .atomic)
+
+                let metadata = ClipboardItem.ImageMetadata(
+                    assetFileName: fileName,
+                    pasteboardType: image.pasteboardType,
+                    byteSize: image.byteSize,
+                    pixelWidth: image.pixelWidth,
+                    pixelHeight: image.pixelHeight,
+                    sha256: digest
+                )
+                item = ClipboardItem(payload: .image(metadata), sourceAppBundleId: sourceAppBundleId)
+            } catch {
+                return
+            }
         }
 
-        // 忽略重复内容（与最新项目相同）
-        if let latest = items.first, latest.content == text {
-            return
-        }
-
-        // 创建新项目并插入到列表开头
-        let item = ClipboardItem(content: text, sourceAppBundleId: sourceAppBundleId)
         items.insert(item, at: 0)
+        trimToLimitAndCleanAssets()
+        save()
+    }
 
-        // 如果超过最大数量，截断列表
-        if items.count > maxItems {
-            items = Array(items.prefix(maxItems))
+    /// 获取图片条目的二进制数据
+    /// - Parameter item: 历史记录条目
+    /// - Returns: 图片数据与类型；非图片或读取失败时返回 nil
+    func imageBlob(for item: ClipboardItem) -> ClipboardImageBlob? {
+        guard let metadata = item.imageMetadata else {
+            return nil
+        }
+        let fileURL = assetsDirectoryURL.appendingPathComponent(metadata.assetFileName)
+        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else {
+            return nil
+        }
+        return ClipboardImageBlob(data: data, pasteboardType: metadata.pasteboardType)
+    }
+
+    /// 获取图片资产 URL（用于 UI 缩略图读取）
+    /// - Parameter item: 历史记录条目
+    /// - Returns: 图片资产 URL
+    func imageAssetURL(for item: ClipboardItem) -> URL? {
+        guard let metadata = item.imageMetadata else {
+            return nil
+        }
+        return assetsDirectoryURL.appendingPathComponent(metadata.assetFileName)
+    }
+
+    /// 切换某条记录的收藏状态
+    /// - Parameter itemID: 历史记录 ID
+    func toggleFavorite(for itemID: ClipboardItem.ID) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else {
+            return
         }
 
-        // 保存到磁盘
+        items[index].isFavorite.toggle()
         save()
     }
 
     /// 清空所有历史记录
     func clear() {
+        let previousItems = items
         items.removeAll()
+        removeAssets(for: previousItems)
         save()
     }
 
@@ -105,7 +191,21 @@ final class ClipboardStore: ObservableObject, ClipboardStoreProtocol {
         do {
             let data = try Data(contentsOf: storageURL)
             let decodedItems = try decoder.decode([ClipboardItem].self, from: data)
-            items = Array(decodedItems.prefix(maxItems))
+            let removedItemsByLimit = Array(decodedItems.dropFirst(maxItems))
+            removeAssets(for: removedItemsByLimit)
+
+            let trimmedItems = Array(decodedItems.prefix(maxItems))
+            items = trimmedItems.filter { item in
+                guard let metadata = item.imageMetadata else {
+                    return true
+                }
+                let fileURL = assetsDirectoryURL.appendingPathComponent(metadata.assetFileName)
+                return fileManager.fileExists(atPath: fileURL.path)
+            }
+
+            if !removedItemsByLimit.isEmpty || items.count != trimmedItems.count {
+                save()
+            }
         } catch {
             // 加载失败时重置为空列表
             items = []
@@ -119,6 +219,7 @@ final class ClipboardStore: ObservableObject, ClipboardStoreProtocol {
         do {
             // 创建必要的目录
             try fileManager.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
+            try ensureAssetsDirectory()
             // 编码并写入文件
             let data = try encoder.encode(items)
             try data.write(to: storageURL, options: .atomic)
@@ -136,5 +237,48 @@ final class ClipboardStore: ObservableObject, ClipboardStoreProtocol {
         return appSupportDirectory
             .appendingPathComponent("Paste", isDirectory: true)
             .appendingPathComponent("clipboard-history.json")
+    }
+
+    private func trimToLimitAndCleanAssets() {
+        guard items.count > maxItems else {
+            return
+        }
+
+        let removedItems = Array(items.dropFirst(maxItems))
+        items = Array(items.prefix(maxItems))
+        removeAssets(for: removedItems)
+    }
+
+    private func removeAssets(for removedItems: [ClipboardItem]) {
+        for item in removedItems {
+            guard let metadata = item.imageMetadata else {
+                continue
+            }
+            let fileURL = assetsDirectoryURL.appendingPathComponent(metadata.assetFileName)
+            try? fileManager.removeItem(at: fileURL)
+        }
+    }
+
+    private func ensureAssetsDirectory() throws {
+        try fileManager.createDirectory(at: assetsDirectoryURL, withIntermediateDirectories: true)
+    }
+
+    private func imageFileName(for pasteboardType: String) -> String {
+        let fileExtension: String
+        switch pasteboardType {
+        case "public.png":
+            fileExtension = "png"
+        case "public.tiff":
+            fileExtension = "tiff"
+        default:
+            fileExtension = "img"
+        }
+
+        return "\(UUID().uuidString).\(fileExtension)"
+    }
+
+    private static func sha256Hex(of data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

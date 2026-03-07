@@ -3,17 +3,17 @@ import Foundation
 
 // MARK: - 剪贴板监控器
 /// 监控系统剪贴板的变化
-/// 当检测到新的文本内容时触发回调
+/// 当检测到新的文本或图片内容时触发回调
 @MainActor
 final class ClipboardMonitor {
-    /// 文本复制回调类型
+    /// 复制回调类型
     /// - Parameters:
-    ///   - text: 复制的文本内容
+    ///   - payload: 复制内容（文本或图片）
     ///   - sourceAppBundleId: 来源应用的 Bundle 标识符
-    typealias OnTextCopied = (_ text: String, _ sourceAppBundleId: String?) -> Void
+    typealias OnPayloadCopied = (_ payload: ClipboardCapturedPayload, _ sourceAppBundleId: String?) -> Void
 
-    /// 文本复制回调
-    var onTextCopied: OnTextCopied?
+    /// 复制回调
+    var onPayloadCopied: OnPayloadCopied?
 
     /// 系统剪贴板实例
     private let pasteboard: NSPasteboard
@@ -90,14 +90,46 @@ final class ClipboardMonitor {
             return
         }
 
-        // 获取剪贴板中的文本内容
-        guard let text = pasteboard.string(forType: .string), !text.isEmpty else {
+        // 优先检测剪贴板中的图片对象，失败再回退文本
+        guard let payload = readPayloadFromPasteboard() else {
             return
         }
 
         // 获取当前前台应用的 Bundle 标识符
         let sourceAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         // 触发回调
-        onTextCopied?(text, sourceAppBundleId)
+        onPayloadCopied?(payload, sourceAppBundleId)
+    }
+
+    private func readPayloadFromPasteboard() -> ClipboardCapturedPayload? {
+        if let imagePayload = readImagePayload() {
+            return imagePayload
+        }
+
+        guard let text = pasteboard.string(forType: .string), !text.isEmpty else {
+            return nil
+        }
+        return .text(text)
+    }
+
+    private func readImagePayload() -> ClipboardCapturedPayload? {
+        let candidates: [NSPasteboard.PasteboardType] = [.png, .tiff]
+
+        for type in candidates {
+            guard let data = pasteboard.data(forType: type), !data.isEmpty else {
+                continue
+            }
+
+            let bitmapRep = NSBitmapImageRep(data: data)
+            let image = ClipboardCapturedImage(
+                data: data,
+                pasteboardType: type.rawValue,
+                pixelWidth: bitmapRep?.pixelsWide,
+                pixelHeight: bitmapRep?.pixelsHigh
+            )
+            return .image(image)
+        }
+
+        return nil
     }
 }

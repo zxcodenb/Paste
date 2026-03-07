@@ -1,13 +1,50 @@
+import AppKit
 import SwiftUI
 
 struct HistoryPanelView: View {
+    private enum HistoryFilter: String, CaseIterable, Identifiable {
+        case all
+        case text
+        case image
+        case favorites
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all:
+                return "All"
+            case .text:
+                return "Text"
+            case .image:
+                return "Image"
+            case .favorites:
+                return "Favorites"
+            }
+        }
+    }
+
     @ObservedObject var store: ClipboardStore
     let onSelect: (ClipboardItem) -> Void
     let onClear: () -> Void
     let onClose: () -> Void
 
+    @State private var selectedFilter: HistoryFilter = .all
     @State private var selectedItemID: ClipboardItem.ID?
     @FocusState private var isListFocused: Bool
+
+    private var filteredItems: [ClipboardItem] {
+        switch selectedFilter {
+        case .all:
+            return store.items
+        case .text:
+            return store.items.filter { $0.category == .text }
+        case .image:
+            return store.items.filter { $0.category == .image }
+        case .favorites:
+            return store.items.filter(\.isFavorite)
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -15,9 +52,10 @@ struct HistoryPanelView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 header
+                filterBar
                 keyboardHint
 
-                if store.items.isEmpty {
+                if filteredItems.isEmpty {
                     emptyState
                 } else {
                     historyList
@@ -82,7 +120,7 @@ struct HistoryPanelView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(Color(red: 0.30, green: 0.53, blue: 0.95))
-            .disabled(store.items.isEmpty || selectedItemID == nil)
+            .disabled(filteredItems.isEmpty || selectedItemID == nil)
             .keyboardShortcut(.defaultAction)
 
             Button("Clear") {
@@ -99,10 +137,22 @@ struct HistoryPanelView: View {
         }
     }
 
+    private var filterBar: some View {
+        Picker("Filter", selection: $selectedFilter) {
+            ForEach(HistoryFilter.allCases) { filter in
+                Text(filter.title).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("History Filter")
+    }
+
     private var keyboardHint: some View {
         HStack(spacing: 10) {
             Label("Up / Down", systemImage: "arrow.up.arrow.down")
             Text("Move")
+            Label("Left / Right", systemImage: "arrow.left.arrow.right")
+            Text("Filter")
             Label("Return", systemImage: "return.left")
             Text("Copy")
         }
@@ -125,9 +175,15 @@ struct HistoryPanelView: View {
             Text("No Clipboard History")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Copy some text from any app, it will appear here.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if store.items.isEmpty {
+                Text("Copy text or image from any app, it will appear here.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No \(selectedFilter.title.lowercased()) items in current filter.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
@@ -144,15 +200,10 @@ struct HistoryPanelView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 4) {
-                    ForEach(store.items) { item in
+                    ForEach(filteredItems) { item in
                         row(item)
                             .id(item.id)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selectedItemID = item.id
-                                selectCurrentItem()
-                            }
-                            .help(item.content)
+                            .help(tooltip(for: item))
                     }
                 }
                 .padding(6)
@@ -173,13 +224,24 @@ struct HistoryPanelView: View {
                 }
                 return .handled
             }
+            .onKeyPress(.leftArrow) {
+                moveFilter(by: -1)
+                return .handled
+            }
+            .onKeyPress(.rightArrow) {
+                moveFilter(by: 1)
+                return .handled
+            }
             .onAppear {
                 normalizeSelection()
                 DispatchQueue.main.async {
                     isListFocused = true
                 }
             }
-            .onChange(of: store.items.map(\.id)) { _ in
+            .onChange(of: filteredItems.map(\.id)) {
+                normalizeSelection()
+            }
+            .onChange(of: selectedFilter) {
                 normalizeSelection()
             }
         }
@@ -189,27 +251,59 @@ struct HistoryPanelView: View {
         let isSelected = selectedItemID == item.id
 
         return HStack(spacing: 0) {
-            // Left accent bar for selected state
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(Color.primary.opacity(isSelected ? 0.7 : 0))
-                .frame(width: 3)
-                .padding(.vertical, 6)
+            HStack(spacing: 0) {
+                // Left accent bar for selected state
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color.primary.opacity(isSelected ? 0.7 : 0))
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(item.content)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 8) {
+                    categoryTag(item.category)
 
-                Text(item.copiedAt, format: .dateTime.hour().minute().second())
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.tertiary)
+                    switch item.payload {
+                    case let .text(text):
+                        Text(text)
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(isSelected ? .primary : .secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    case let .image(metadata):
+                        HStack(alignment: .top, spacing: 10) {
+                            imageThumbnail(for: item)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Image")
+                                    .font(.system(.body, design: .rounded).weight(.semibold))
+                                    .foregroundStyle(isSelected ? .primary : .secondary)
+                                Text(imageMetaDescription(metadata))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    Text(item.copiedAt, format: .dateTime.hour().minute().second())
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.leading, 10)
+                .padding(.trailing, 12)
+                .padding(.vertical, 12)
             }
-            .padding(.leading, 10)
-            .padding(.trailing, 12)
-            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedItemID = item.id
+                selectCurrentItem()
+            }
+
+            favoriteButton(for: item)
+                .padding(.trailing, 12)
         }
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -228,41 +322,123 @@ struct HistoryPanelView: View {
     }
 
     private func moveSelection(by step: Int) {
-        guard !store.items.isEmpty else {
+        guard !filteredItems.isEmpty else {
             selectedItemID = nil
             return
         }
 
         guard let selectedItemID,
-              let currentIndex = store.items.firstIndex(where: { $0.id == selectedItemID }) else {
-            self.selectedItemID = store.items.first?.id
+              let currentIndex = filteredItems.firstIndex(where: { $0.id == selectedItemID }) else {
+            self.selectedItemID = filteredItems.first?.id
             return
         }
 
-        let nextIndex = min(max(currentIndex + step, 0), store.items.count - 1)
-        self.selectedItemID = store.items[nextIndex].id
+        let nextIndex = min(max(currentIndex + step, 0), filteredItems.count - 1)
+        self.selectedItemID = filteredItems[nextIndex].id
+    }
+
+    private func moveFilter(by step: Int) {
+        let filters = HistoryFilter.allCases
+        guard let currentIndex = filters.firstIndex(of: selectedFilter) else {
+            selectedFilter = .all
+            return
+        }
+
+        let nextIndex = min(max(currentIndex + step, 0), filters.count - 1)
+        selectedFilter = filters[nextIndex]
     }
 
     private func normalizeSelection() {
-        guard !store.items.isEmpty else {
+        guard !filteredItems.isEmpty else {
             selectedItemID = nil
             return
         }
 
         if let selectedItemID,
-           store.items.contains(where: { $0.id == selectedItemID }) {
+           filteredItems.contains(where: { $0.id == selectedItemID }) {
             return
         }
 
-        selectedItemID = store.items.first?.id
+        selectedItemID = filteredItems.first?.id
     }
 
     private func selectCurrentItem() {
         guard let selectedItemID,
-              let item = store.items.first(where: { $0.id == selectedItemID }) else {
+              let item = filteredItems.first(where: { $0.id == selectedItemID }) else {
             return
         }
 
         onSelect(item)
+    }
+
+    private func tooltip(for item: ClipboardItem) -> String {
+        switch item.payload {
+        case let .text(text):
+            return text
+        case let .image(metadata):
+            return "Image \(pixelDescription(metadata)) · \(byteCountString(metadata.byteSize))"
+        }
+    }
+
+    @ViewBuilder
+    private func imageThumbnail(for item: ClipboardItem) -> some View {
+        if let url = store.imageAssetURL(for: item),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.gray.opacity(0.15))
+                .frame(width: 54, height: 54)
+                .overlay(
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                )
+        }
+    }
+
+    private func imageMetaDescription(_ metadata: ClipboardItem.ImageMetadata) -> String {
+        "\(pixelDescription(metadata)) · \(byteCountString(metadata.byteSize))"
+    }
+
+    private func pixelDescription(_ metadata: ClipboardItem.ImageMetadata) -> String {
+        guard let width = metadata.pixelWidth, let height = metadata.pixelHeight else {
+            return "Unknown size"
+        }
+        return "\(width)×\(height)"
+    }
+
+    private func byteCountString(_ byteCount: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file)
+    }
+
+    private func favoriteButton(for item: ClipboardItem) -> some View {
+        Button {
+            store.toggleFavorite(for: item.id)
+        } label: {
+            Image(systemName: item.isFavorite ? "star.fill" : "star")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(item.isFavorite ? Color.yellow : Color.secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.white.opacity(0.5), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help(item.isFavorite ? "Remove from favorites" : "Add to favorites")
+    }
+
+    private func categoryTag(_ category: ClipboardItem.Category) -> some View {
+        Text(category == .text ? "Text" : "Image")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.55), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.7), lineWidth: 0.5)
+            )
     }
 }
