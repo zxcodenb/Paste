@@ -25,19 +25,10 @@ struct PasteApp: App {
                 store: controller.store,
                 launchAtLoginManager: controller.launchAtLoginManager,
                 onOpenHistory: controller.openHistoryPanel,
+                onOpenSettings: controller.openSettingsPanel,
                 onClearHistory: controller.clearHistory
             )
         }
         .menuBarExtraStyle(.menu)
-
-        // 设置窗口
-        Settings {
-            SettingsView(
-                store: controller.store,
-                launchAtLoginManager: controller.launchAtLoginManager,
-                historyLimit: controller.store.maxItems,
-                onClearHistory: controller.clearHistory
-            )
-        }
     }
 }

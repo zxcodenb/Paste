@@ -40,9 +40,9 @@ struct HistoryPanelView: View {
     @ObservedObject var store: ClipboardStore
     let onSelect: (ClipboardItem) -> Void
     let onClear: () -> Void
+    let onOpenSettings: () -> Void
     let onClose: () -> Void
     private let sourceAppResolver: any SourceAppResolving
-    @Environment(\.openSettings) private var openSettings
 
     @State private var selectedFilter: HistoryFilter = .all
     @State private var selectedItemID: ClipboardItem.ID?
@@ -53,12 +53,14 @@ struct HistoryPanelView: View {
         store: ClipboardStore,
         onSelect: @escaping (ClipboardItem) -> Void,
         onClear: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void,
         onClose: @escaping () -> Void,
         sourceAppResolver: any SourceAppResolving
     ) {
         _store = ObservedObject(wrappedValue: store)
         self.onSelect = onSelect
         self.onClear = onClear
+        self.onOpenSettings = onOpenSettings
         self.onClose = onClose
         self.sourceAppResolver = sourceAppResolver
     }
@@ -150,7 +152,7 @@ struct HistoryPanelView: View {
             HStack {
                 Spacer()
                 Button {
-                    openSettings()
+                    onOpenSettings()
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 16, weight: .medium))

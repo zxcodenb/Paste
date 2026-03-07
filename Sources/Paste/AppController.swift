@@ -22,6 +22,8 @@ final class AppController: ObservableObject {
     private let sourceAppResolver: any SourceAppResolving
     /// 标记应用是否已启动
     private var didStart = false
+    /// 面板当前页面
+    private var panelPage: PanelPage = .history
 
     /// 面板控制器，用于显示历史记录面板
     private lazy var panelController = PanelController { [weak self] in
@@ -30,13 +32,19 @@ final class AppController: ObservableObject {
         }
 
         return AnyView(
-            HistoryPanelView(
+            PanelRootView(
+                initialPage: self.panelPage,
                 store: self.store,
+                launchAtLoginManager: self.launchAtLoginManager,
+                historyLimit: self.store.maxItems,
                 onSelect: { [weak self] item in
                     self?.handleSelection(item)
                 },
-                onClear: { [weak self] in
+                onClearHistory: { [weak self] in
                     self?.clearHistory()
+                },
+                onPageChanged: { [weak self] page in
+                    self?.panelPage = page
                 },
                 onClose: { [weak self] in
                     self?.hideHistoryPanel()
@@ -101,6 +109,13 @@ final class AppController: ObservableObject {
 
     /// 打开历史面板
     func openHistoryPanel() {
+        panelPage = .history
+        panelController.show()
+    }
+
+    /// 打开设置面板（在同一面板中展示）
+    func openSettingsPanel() {
+        panelPage = .settings
         panelController.show()
     }
 

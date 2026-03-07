@@ -12,11 +12,10 @@ struct MenuBarContentView: View {
 
     /// 打开历史面板回调
     let onOpenHistory: () -> Void
+    /// 打开设置面板回调
+    let onOpenSettings: () -> Void
     /// 清除历史回调
     let onClearHistory: () -> Void
-
-    /// 系统设置环境
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         // 打开历史记录按钮
@@ -42,7 +41,7 @@ struct MenuBarContentView: View {
 
         // 设置按钮
         Button("Settings") {
-            openSettings()
+            onOpenSettings()
         }
 
         // 退出按钮

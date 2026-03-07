@@ -16,27 +16,27 @@ struct SettingsView: View {
     var body: some View {
         Form {
             // 通用设置
-            Section("General") {
+            Section("通用") {
                 // 开机启动开关
-                Toggle("Launch at Login", isOn: Binding(
+                Toggle("开机启动", isOn: Binding(
                     get: { launchAtLoginManager.isEnabled },
                     set: { launchAtLoginManager.setEnabled($0) }
                 ))
 
                 // 快捷键显示
                 HStack {
-                    Text("Hotkey")
+                    Text("快捷键")
                     Spacer()
-                    Text("Option + Space")
+                    Text("Option + 空格")
                         .foregroundStyle(.secondary)
                 }
             }
 
             // 历史记录设置
-            Section("History") {
+            Section("历史记录") {
                 // 当前项目数量
                 HStack {
-                    Text("Current Items")
+                    Text("当前条目")
                     Spacer()
                     Text("\(store.items.count)")
                         .foregroundStyle(.secondary)
@@ -44,14 +44,14 @@ struct SettingsView: View {
 
                 // 最大项目数量
                 HStack {
-                    Text("Max Items")
+                    Text("最大条目")
                     Spacer()
                     Text("\(historyLimit)")
                         .foregroundStyle(.secondary)
                 }
 
                 // 清除历史按钮
-                Button("Clear History", role: .destructive) {
+                Button("清空历史", role: .destructive) {
                     onClearHistory()
                 }
                 .disabled(store.items.isEmpty)
@@ -59,7 +59,7 @@ struct SettingsView: View {
 
             // 错误信息显示
             if let errorMessage = launchAtLoginManager.errorMessage {
-                Section("Service") {
+                Section("服务") {
                     Text(errorMessage)
                         .font(.footnote)
                         .foregroundStyle(.red)
@@ -67,6 +67,6 @@ struct SettingsView: View {
             }
         }
         .padding(16)
-        .frame(width: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
