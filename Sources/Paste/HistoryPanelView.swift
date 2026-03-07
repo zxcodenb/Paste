@@ -128,13 +128,11 @@ struct HistoryPanelView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Clipboard History")
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.primary)
-            }
-
+        HStack {
+            Spacer()
+            Text("Paste")
+                .font(.system(size: 24, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
             Spacer()
         }
     }
@@ -176,6 +174,22 @@ struct HistoryPanelView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
         )
+        .focusable()
+        .focused($isListFocused)
+        .onKeyPress(.leftArrow) {
+            moveFilter(by: -1)
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            moveFilter(by: 1)
+            return .handled
+        }
+        .onKeyPress(.escape) {
+            closePanelFromKeyboard()
+        }
+        .onAppear {
+            requestKeyboardFocus()
+        }
     }
 
     private var historyList: some View {
@@ -214,11 +228,12 @@ struct HistoryPanelView: View {
                 moveFilter(by: 1)
                 return .handled
             }
+            .onKeyPress(.escape) {
+                closePanelFromKeyboard()
+            }
             .onAppear {
                 normalizeSelection()
-                DispatchQueue.main.async {
-                    isListFocused = true
-                }
+                requestKeyboardFocus()
             }
             .onChange(of: filteredItems.map(\.id)) {
                 normalizeSelection()
@@ -226,6 +241,12 @@ struct HistoryPanelView: View {
             .onChange(of: selectedFilter) {
                 normalizeSelection()
             }
+        }
+    }
+
+    private func requestKeyboardFocus() {
+        DispatchQueue.main.async {
+            isListFocused = true
         }
     }
 
@@ -363,6 +384,11 @@ struct HistoryPanelView: View {
         }
 
         onSelect(item)
+    }
+
+    private func closePanelFromKeyboard() -> KeyPress.Result {
+        onClose()
+        return .handled
     }
 
     private func confirmDelete(_ item: ClipboardItem) {
