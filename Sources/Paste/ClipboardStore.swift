@@ -22,6 +22,9 @@ protocol ClipboardStoreProtocol: AnyObject {
     /// 切换某条记录的收藏状态
     /// - Parameter itemID: 历史记录 ID
     func toggleFavorite(for itemID: ClipboardItem.ID)
+    /// 删除某条历史记录
+    /// - Parameter itemID: 历史记录 ID
+    func remove(itemID: ClipboardItem.ID)
 }
 
 // MARK: - 剪贴板存储
@@ -169,6 +172,18 @@ final class ClipboardStore: ObservableObject, ClipboardStoreProtocol {
         }
 
         items[index].isFavorite.toggle()
+        save()
+    }
+
+    /// 删除某条历史记录
+    /// - Parameter itemID: 历史记录 ID
+    func remove(itemID: ClipboardItem.ID) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else {
+            return
+        }
+
+        let removedItem = items.remove(at: index)
+        removeAssets(for: [removedItem])
         save()
     }
 

@@ -28,10 +28,26 @@ struct HistoryPanelView: View {
     let onSelect: (ClipboardItem) -> Void
     let onClear: () -> Void
     let onClose: () -> Void
+    private let sourceAppResolver: any SourceAppResolving
 
     @State private var selectedFilter: HistoryFilter = .all
     @State private var selectedItemID: ClipboardItem.ID?
+    @State private var deleteCandidate: ClipboardItem?
     @FocusState private var isListFocused: Bool
+
+    init(
+        store: ClipboardStore,
+        onSelect: @escaping (ClipboardItem) -> Void,
+        onClear: @escaping () -> Void,
+        onClose: @escaping () -> Void,
+        sourceAppResolver: any SourceAppResolving
+    ) {
+        _store = ObservedObject(wrappedValue: store)
+        self.onSelect = onSelect
+        self.onClear = onClear
+        self.onClose = onClose
+        self.sourceAppResolver = sourceAppResolver
+    }
 
     private var filteredItems: [ClipboardItem] {
         switch selectedFilter {
@@ -53,7 +69,6 @@ struct HistoryPanelView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 filterBar
-                keyboardHint
 
                 if filteredItems.isEmpty {
                     emptyState
@@ -88,6 +103,16 @@ struct HistoryPanelView: View {
         }
         .preferredColorScheme(.light)
         .frame(minWidth: 620, minHeight: 500)
+        .alert(item: $deleteCandidate) { item in
+            Alert(
+                title: Text("Delete this record?"),
+                message: Text("This action cannot be undone."),
+                primaryButton: .destructive(Text("Delete")) {
+                    confirmDelete(item)
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
 
     private var backgroundLayer: some View {
@@ -108,32 +133,9 @@ struct HistoryPanelView: View {
                 Text("Clipboard History")
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
-                Text("Liquid glass style quick picker")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
             }
 
             Spacer()
-
-            Button("Copy") {
-                selectCurrentItem()
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color(red: 0.30, green: 0.53, blue: 0.95))
-            .disabled(filteredItems.isEmpty || selectedItemID == nil)
-            .keyboardShortcut(.defaultAction)
-
-            Button("Clear") {
-                onClear()
-            }
-            .buttonStyle(.bordered)
-            .disabled(store.items.isEmpty)
-
-            Button("Close") {
-                onClose()
-            }
-            .buttonStyle(.bordered)
-            .keyboardShortcut(.cancelAction)
         }
     }
 
@@ -145,26 +147,6 @@ struct HistoryPanelView: View {
         }
         .pickerStyle(.segmented)
         .accessibilityLabel("History Filter")
-    }
-
-    private var keyboardHint: some View {
-        HStack(spacing: 10) {
-            Label("Up / Down", systemImage: "arrow.up.arrow.down")
-            Text("Move")
-            Label("Left / Right", systemImage: "arrow.left.arrow.right")
-            Text("Filter")
-            Label("Return", systemImage: "return.left")
-            Text("Copy")
-        }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
-        .background(Color.white.opacity(0.5), in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
-        )
     }
 
     private var emptyState: some View {
@@ -249,6 +231,8 @@ struct HistoryPanelView: View {
 
     private func row(_ item: ClipboardItem) -> some View {
         let isSelected = selectedItemID == item.id
+        let sourceInfo = sourceAppResolver.resolve(bundleIdentifier: item.sourceAppBundleId)
+        let copiedTimeText = item.copiedAt.formatted(.dateTime.hour().minute().second())
 
         return HStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -288,7 +272,12 @@ struct HistoryPanelView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    Text(item.copiedAt, format: .dateTime.hour().minute().second())
+                    HStack(spacing: 6) {
+                        sourceAppIcon(for: sourceInfo)
+                        Text("\(sourceInfo.displayName) · \(copiedTimeText)")
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.tertiary)
                 }
@@ -302,8 +291,13 @@ struct HistoryPanelView: View {
                 selectCurrentItem()
             }
 
-            favoriteButton(for: item)
-                .padding(.trailing, 12)
+            VStack(alignment: .trailing, spacing: 8) {
+                deleteButton(for: item)
+                Spacer(minLength: 0)
+                favoriteButton(for: item)
+            }
+            .padding(.trailing, 12)
+            .padding(.vertical, 10)
         }
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -371,12 +365,35 @@ struct HistoryPanelView: View {
         onSelect(item)
     }
 
+    private func confirmDelete(_ item: ClipboardItem) {
+        store.remove(itemID: item.id)
+    }
+
     private func tooltip(for item: ClipboardItem) -> String {
+        let sourceInfo = sourceAppResolver.resolve(bundleIdentifier: item.sourceAppBundleId)
+        let sourceText = sourceInfo.displayName
+
         switch item.payload {
         case let .text(text):
-            return text
+            return "\(sourceText)\n\(text)"
         case let .image(metadata):
-            return "Image \(pixelDescription(metadata)) · \(byteCountString(metadata.byteSize))"
+            return "\(sourceText)\nImage \(pixelDescription(metadata)) · \(byteCountString(metadata.byteSize))"
+        }
+    }
+
+    @ViewBuilder
+    private func sourceAppIcon(for info: SourceAppDisplayInfo) -> some View {
+        if let icon = info.icon {
+            Image(nsImage: icon)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 14, height: 14)
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        } else {
+            Image(systemName: "app")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 14, height: 14)
         }
     }
 
@@ -427,6 +444,20 @@ struct HistoryPanelView: View {
         }
         .buttonStyle(.plain)
         .help(item.isFavorite ? "Remove from favorites" : "Add to favorites")
+    }
+
+    private func deleteButton(for item: ClipboardItem) -> some View {
+        Button {
+            deleteCandidate = item
+        } label: {
+            Image(systemName: "trash")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.55), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Delete this record")
     }
 
     private func categoryTag(_ category: ClipboardItem.Category) -> some View {

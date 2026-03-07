@@ -18,6 +18,8 @@ final class AppController: ObservableObject {
     private let hotkeyManager: HotkeyManager
     /// 剪贴板写入器
     private let pasteboardWriter: any PasteboardWriting
+    /// 来源应用解析器
+    private let sourceAppResolver: any SourceAppResolving
     /// 标记应用是否已启动
     private var didStart = false
 
@@ -38,7 +40,8 @@ final class AppController: ObservableObject {
                 },
                 onClose: { [weak self] in
                     self?.hideHistoryPanel()
-                }
+                },
+                sourceAppResolver: self.sourceAppResolver
             )
         )
     }
@@ -62,6 +65,7 @@ final class AppController: ObservableObject {
         self.clipboardMonitor = clipboardMonitor
         self.hotkeyManager = hotkeyManager
         self.pasteboardWriter = pasteboardWriter
+        self.sourceAppResolver = SourceAppResolver()
 
         // 设置剪贴板监控回调 - 当检测到新内容时添加到存储
         self.clipboardMonitor.onPayloadCopied = { [weak self] payload, sourceBundleId in

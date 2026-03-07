@@ -255,6 +255,48 @@ final class ClipboardStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: imageURL.path))
     }
 
+    // MARK: - 测试删除单条记录
+    /// 测试删除单条图片记录时会清理对应资产并保留其他记录
+    func testRemoveSingleItemRemovesOnlyTargetAsset() {
+        let storageURL = makeStorageURL()
+        let store = ClipboardStore(maxItems: 10, storageURL: storageURL)
+
+        let imageA = ClipboardCapturedImage(
+            data: Data([0x11, 0x22, 0x33]),
+            pasteboardType: "public.png",
+            pixelWidth: 10,
+            pixelHeight: 10
+        )
+        let imageB = ClipboardCapturedImage(
+            data: Data([0x44, 0x55, 0x66]),
+            pasteboardType: "public.png",
+            pixelWidth: 20,
+            pixelHeight: 20
+        )
+
+        store.addFromPasteboard(.image(imageA), sourceAppBundleId: nil)
+        store.addFromPasteboard(.image(imageB), sourceAppBundleId: nil)
+
+        XCTAssertEqual(store.items.count, 2)
+        guard let targetItem = store.items.first,
+              let keptItem = store.items.last,
+              let targetURL = store.imageAssetURL(for: targetItem),
+              let keptURL = store.imageAssetURL(for: keptItem) else {
+            XCTFail("Missing inserted image assets")
+            return
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: targetURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keptURL.path))
+
+        store.remove(itemID: targetItem.id)
+
+        XCTAssertEqual(store.items.count, 1)
+        XCTAssertEqual(store.items.first?.id, keptItem.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: targetURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keptURL.path))
+    }
+
     // MARK: - 测试旧版 JSON 迁移
     /// 测试旧字段 content 能向后兼容解码为文本条目
     func testLegacyContentFieldCanBeLoaded() throws {
