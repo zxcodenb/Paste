@@ -24,7 +24,13 @@ final class PanelController {
 
     /// 切换面板显示状态
     func toggle() {
-        isVisible ? hide() : show()
+        // 在切换到其他应用时，NSPanel 可能被系统隐藏但仍保留 isVisible 状态。
+        // 仅当应用激活且面板可见时才执行隐藏，其他情况统一显示，避免需要按两次快捷键。
+        if NSApplication.shared.isActive && isVisible {
+            hide()
+        } else {
+            show()
+        }
     }
 
     /// 显示面板

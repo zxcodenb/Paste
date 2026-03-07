@@ -29,6 +29,7 @@ struct HistoryPanelView: View {
     let onClear: () -> Void
     let onClose: () -> Void
     private let sourceAppResolver: any SourceAppResolving
+    @Environment(\.openSettings) private var openSettings
 
     @State private var selectedFilter: HistoryFilter = .all
     @State private var selectedItemID: ClipboardItem.ID?
@@ -128,13 +129,23 @@ struct HistoryPanelView: View {
     }
 
     private var header: some View {
-        HStack {
-            Spacer()
+        ZStack {
             Text("Paste")
                 .font(.system(size: 24, weight: .semibold, design: .rounded))
                 .foregroundStyle(.primary)
-            Spacer()
+
+            HStack {
+                Spacer()
+                Button("设置") {
+                    openSettings()
+                }
+                .buttonStyle(.borderless)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .help("Open Settings")
+            }
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var filterBar: some View {
