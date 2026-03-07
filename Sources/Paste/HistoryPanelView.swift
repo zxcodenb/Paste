@@ -22,6 +22,19 @@ struct HistoryPanelView: View {
                 return "Favorites"
             }
         }
+
+        var symbolName: String {
+            switch self {
+            case .all:
+                return "square.grid.2x2"
+            case .text:
+                return "textformat"
+            case .image:
+                return "photo"
+            case .favorites:
+                return "star"
+            }
+        }
     }
 
     @ObservedObject var store: ClipboardStore
@@ -136,24 +149,30 @@ struct HistoryPanelView: View {
 
             HStack {
                 Spacer()
-                Button("设置") {
+                Button {
                     openSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 16, weight: .medium))
                 }
-                .buttonStyle(.borderless)
-                .font(.subheadline.weight(.medium))
+                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .help("Open Settings")
+                .accessibilityLabel("Settings")
             }
         }
         .frame(maxWidth: .infinity)
     }
 
     private var filterBar: some View {
-        Picker("Filter", selection: $selectedFilter) {
+        Picker("History Filter", selection: $selectedFilter) {
             ForEach(HistoryFilter.allCases) { filter in
-                Text(filter.title).tag(filter)
+                Image(systemName: filter.symbolName)
+                    .accessibilityLabel(filter.title)
+                    .tag(filter)
             }
         }
+        .labelsHidden()
         .pickerStyle(.segmented)
         .accessibilityLabel("History Filter")
     }
@@ -237,6 +256,10 @@ struct HistoryPanelView: View {
             }
             .onKeyPress(.rightArrow) {
                 moveFilter(by: 1)
+                return .handled
+            }
+            .onKeyPress(.return) {
+                selectCurrentItem()
                 return .handled
             }
             .onKeyPress(.escape) {
