@@ -44,6 +44,7 @@ struct HistoryPanelView: View {
     let onClose: () -> Void
     private let sourceAppResolver: any SourceAppResolving
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedFilter: HistoryFilter = .all
     @State private var selectedItemID: ClipboardItem.ID?
     @State private var deleteCandidate: ClipboardItem?
@@ -95,17 +96,17 @@ struct HistoryPanelView: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.72))
+                    .fill(ThemeColors.cardFill(colorScheme))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.85), lineWidth: 0.5)
+                    .stroke(ThemeColors.cardBorder(colorScheme), lineWidth: 0.5)
             )
             .overlay(alignment: .top) {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [.white.opacity(0.35), .clear],
+                            colors: [ThemeColors.topHighlight(colorScheme), .clear],
                             startPoint: .top,
                             endPoint: .center
                         )
@@ -114,10 +115,9 @@ struct HistoryPanelView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .allowsHitTesting(false)
             }
-            .shadow(color: Color.black.opacity(0.06), radius: 16, y: 6)
+            .shadow(color: ThemeColors.shadow(colorScheme), radius: 16, y: 6)
             .padding(14)
         }
-        .preferredColorScheme(.light)
         .frame(minWidth: 620, minHeight: 500)
         .alert(item: $deleteCandidate) { item in
             Alert(
@@ -134,8 +134,8 @@ struct HistoryPanelView: View {
     private var backgroundLayer: some View {
         LinearGradient(
             colors: [
-                Color(red: 0.94, green: 0.96, blue: 1.0),
-                Color(red: 0.91, green: 0.94, blue: 0.98)
+                ThemeColors.backgroundGradientStart(colorScheme),
+                ThemeColors.backgroundGradientEnd(colorScheme)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -200,11 +200,11 @@ struct HistoryPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.45))
+                .fill(ThemeColors.emptyStateFill(colorScheme))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
+                .stroke(ThemeColors.emptyStateBorder(colorScheme), lineWidth: 0.5)
         )
         .focusable()
         .focused($isListFocused)
@@ -361,17 +361,21 @@ struct HistoryPanelView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(isSelected ? 0.55 : 0.35))
+                .fill(ThemeColors.rowFill(selected: isSelected, colorScheme))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(
-                    Color.white.opacity(isSelected ? 0.8 : 0.45),
+                    ThemeColors.rowBorder(selected: isSelected, colorScheme),
                     lineWidth: 0.5
                 )
         )
         .scaleEffect(isSelected ? 1.01 : 1.0)
-        .shadow(color: Color.black.opacity(isSelected ? 0.07 : 0.02), radius: isSelected ? 6 : 2, y: 2)
+        .shadow(
+            color: isSelected ? ThemeColors.shadowSelected(colorScheme) : ThemeColors.shadowUnselected(colorScheme),
+            radius: isSelected ? 6 : 2,
+            y: 2
+        )
         .animation(.easeOut(duration: 0.18), value: isSelected)
     }
 
@@ -505,7 +509,7 @@ struct HistoryPanelView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(item.isFavorite ? Color.yellow : Color.secondary)
                 .frame(width: 28, height: 28)
-                .background(Color.white.opacity(0.5), in: Circle())
+                .background(ThemeColors.buttonFillSecondary(colorScheme), in: Circle())
         }
         .buttonStyle(.plain)
         .help(item.isFavorite ? "Remove from favorites" : "Add to favorites")
@@ -519,7 +523,7 @@ struct HistoryPanelView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 24, height: 24)
-                .background(Color.white.opacity(0.55), in: Circle())
+                .background(ThemeColors.buttonFill(colorScheme), in: Circle())
         }
         .buttonStyle(.plain)
         .help("Delete this record")
@@ -531,10 +535,10 @@ struct HistoryPanelView: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(Color.white.opacity(0.55), in: Capsule())
+            .background(ThemeColors.tagFill(colorScheme), in: Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.white.opacity(0.7), lineWidth: 0.5)
+                    .stroke(ThemeColors.tagBorder(colorScheme), lineWidth: 0.5)
             )
     }
 

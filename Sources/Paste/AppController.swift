@@ -11,6 +11,8 @@ final class AppController: ObservableObject {
     let store: ClipboardStore
     /// 开机启动管理器
     let launchAtLoginManager: LaunchAtLoginManager
+    /// 外观管理器
+    let appearanceManager: AppearanceManager
 
     /// 剪贴板监控器
     private let clipboardMonitor: ClipboardMonitor
@@ -36,6 +38,7 @@ final class AppController: ObservableObject {
                 initialPage: self.panelPage,
                 store: self.store,
                 launchAtLoginManager: self.launchAtLoginManager,
+                appearanceManager: self.appearanceManager,
                 historyLimit: self.store.maxItems,
                 onSelect: { [weak self] item in
                     self?.handleSelection(item)
@@ -64,12 +67,14 @@ final class AppController: ObservableObject {
     init(
         store: ClipboardStore = ClipboardStore(),
         launchAtLoginManager: LaunchAtLoginManager = LaunchAtLoginManager(),
+        appearanceManager: AppearanceManager = AppearanceManager(),
         clipboardMonitor: ClipboardMonitor = ClipboardMonitor(),
         hotkeyManager: HotkeyManager = HotkeyManager(),
         pasteboardWriter: any PasteboardWriting = SystemPasteboardWriter()
     ) {
         self.store = store
         self.launchAtLoginManager = launchAtLoginManager
+        self.appearanceManager = appearanceManager
         self.clipboardMonitor = clipboardMonitor
         self.hotkeyManager = hotkeyManager
         self.pasteboardWriter = pasteboardWriter

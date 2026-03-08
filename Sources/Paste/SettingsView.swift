@@ -8,6 +8,8 @@ struct SettingsView: View {
     @ObservedObject var store: ClipboardStore
     /// 开机启动管理器
     @ObservedObject var launchAtLoginManager: LaunchAtLoginManager
+    /// 外观管理器
+    @ObservedObject var appearanceManager: AppearanceManager
     /// 历史记录最大数量
     let historyLimit: Int
     /// 清除历史回调
@@ -17,6 +19,14 @@ struct SettingsView: View {
         Form {
             // 通用设置
             Section("通用") {
+                // 外观模式
+                Picker("外观", selection: $appearanceManager.mode) {
+                    ForEach(AppearanceManager.Mode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
                 // 开机启动开关
                 Toggle("开机启动", isOn: Binding(
                     get: { launchAtLoginManager.isEnabled },

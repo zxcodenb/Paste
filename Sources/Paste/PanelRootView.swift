@@ -9,6 +9,7 @@ struct PanelRootView: View {
     @State private var page: PanelPage
     @ObservedObject var store: ClipboardStore
     @ObservedObject var launchAtLoginManager: LaunchAtLoginManager
+    @ObservedObject var appearanceManager: AppearanceManager
     let historyLimit: Int
     let onSelect: (ClipboardItem) -> Void
     let onClearHistory: () -> Void
@@ -16,10 +17,13 @@ struct PanelRootView: View {
     let onClose: () -> Void
     let sourceAppResolver: any SourceAppResolving
 
+    @Environment(\.colorScheme) private var colorScheme
+
     init(
         initialPage: PanelPage,
         store: ClipboardStore,
         launchAtLoginManager: LaunchAtLoginManager,
+        appearanceManager: AppearanceManager,
         historyLimit: Int,
         onSelect: @escaping (ClipboardItem) -> Void,
         onClearHistory: @escaping () -> Void,
@@ -30,6 +34,7 @@ struct PanelRootView: View {
         _page = State(initialValue: initialPage)
         _store = ObservedObject(wrappedValue: store)
         _launchAtLoginManager = ObservedObject(wrappedValue: launchAtLoginManager)
+        _appearanceManager = ObservedObject(wrappedValue: appearanceManager)
         self.historyLimit = historyLimit
         self.onSelect = onSelect
         self.onClearHistory = onClearHistory
@@ -52,6 +57,7 @@ struct PanelRootView: View {
                 onClose: onClose,
                 sourceAppResolver: sourceAppResolver
             )
+            .preferredColorScheme(appearanceManager.resolvedColorScheme)
         case .settings:
             settingsPage
         }
@@ -61,8 +67,8 @@ struct PanelRootView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.94, green: 0.96, blue: 1.0),
-                    Color(red: 0.91, green: 0.94, blue: 0.98)
+                    ThemeColors.backgroundGradientStart(colorScheme),
+                    ThemeColors.backgroundGradientEnd(colorScheme)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -102,22 +108,23 @@ struct PanelRootView: View {
                 SettingsView(
                     store: store,
                     launchAtLoginManager: launchAtLoginManager,
+                    appearanceManager: appearanceManager,
                     historyLimit: historyLimit,
                     onClearHistory: onClearHistory
                 )
                 .background(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color.white.opacity(0.72))
+                        .fill(ThemeColors.cardFill(colorScheme))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(Color.white.opacity(0.85), lineWidth: 0.5)
+                        .stroke(ThemeColors.cardBorder(colorScheme), lineWidth: 0.5)
                 )
-                .shadow(color: Color.black.opacity(0.06), radius: 16, y: 6)
+                .shadow(color: ThemeColors.shadow(colorScheme), radius: 16, y: 6)
             }
             .padding(14)
         }
-        .preferredColorScheme(.light)
+        .preferredColorScheme(appearanceManager.resolvedColorScheme)
         .frame(minWidth: 620, minHeight: 500)
     }
 }
