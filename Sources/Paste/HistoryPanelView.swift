@@ -343,9 +343,12 @@ struct HistoryPanelView: View {
                 .padding(.vertical, 12)
             }
             .contentShape(Rectangle())
-            .onTapGesture {
+            .onTapGesture(count: 2) {
                 selectedItemID = item.id
                 selectCurrentItem()
+            }
+            .onTapGesture {
+                selectedItemID = item.id
             }
 
             VStack(alignment: .trailing, spacing: 8) {
