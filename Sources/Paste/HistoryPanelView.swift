@@ -289,7 +289,7 @@ struct HistoryPanelView: View {
     private func row(_ item: ClipboardItem) -> some View {
         let isSelected = selectedItemID == item.id
         let sourceInfo = sourceAppResolver.resolve(bundleIdentifier: item.sourceAppBundleId)
-        let copiedTimeText = item.copiedAt.formatted(.dateTime.hour().minute().second())
+        let copiedTimeText = relativeTimeString(for: item.copiedAt)
 
         return HStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -533,5 +533,37 @@ struct HistoryPanelView: View {
                 Capsule()
                     .stroke(Color.white.opacity(0.7), lineWidth: 0.5)
             )
+    }
+
+    private func relativeTimeString(for date: Date) -> String {
+        let now = Date()
+        let seconds = Int(now.timeIntervalSince(date))
+
+        if seconds < 60 {
+            return "刚刚"
+        }
+
+        let minutes = seconds / 60
+        if minutes < 60 {
+            return "\(minutes) 分钟前"
+        }
+
+        let hours = minutes / 60
+        let calendar = Calendar.current
+
+        if calendar.isDateInToday(date) {
+            return "\(hours) 小时前"
+        }
+
+        if calendar.isDateInYesterday(date) {
+            return "昨天"
+        }
+
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        if days < 30 {
+            return "\(days) 天前"
+        }
+
+        return date.formatted(.dateTime.year().month().day())
     }
 }
