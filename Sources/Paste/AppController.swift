@@ -150,6 +150,8 @@ final class AppController: ObservableObject {
             }
             pasteboardWriter.writeImageData(blob.data, pasteboardType: blob.pasteboardType)
         }
+        // 播放复制音效
+        NSSound(named: "Pop")?.play()
         // 隐藏面板
         hideHistoryPanel()
     }

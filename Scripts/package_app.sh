@@ -28,6 +28,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$ROOT_DIR/Packaging/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+cp "$ROOT_DIR/Resources/pluck.aiff" "$APP_DIR/Contents/Resources/pluck.aiff"
 
 chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
 codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR"
